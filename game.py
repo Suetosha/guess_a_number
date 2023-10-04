@@ -5,6 +5,7 @@ from aiogram.types import Message
 from text import text
 
 ATTEMPTS = 7
+users = {}
 
 
 class Game:
@@ -30,14 +31,14 @@ class Game:
         if not 0 < num < 101:
             return text['num_range']
 
-        if num == game.secret_number:
+        if num == self.secret_number:
             self.winning_games += 1
             self.reset()
             return text['success']
 
         self.attempts -= 1
         if self.attempts == 0:
-            secret_number = game.secret_number
+            secret_number = self.secret_number
             self.reset()
             return text['zero_attempts'](secret_number)
 
@@ -50,12 +51,14 @@ class Game:
 TOKEN = 'YOUR TOKEN'
 bot = Bot(TOKEN)
 dp = Dispatcher()
-game = Game()
 
 
 @dp.message(CommandStart())
 async def process_start_command(message: Message):
+    user_id = message.from_user.id
     await message.answer(text['welcome'])
+    if user_id not in users.keys():
+        users[user_id] = Game()
 
 
 @dp.message(Command(commands='help'))
@@ -65,21 +68,23 @@ async def process_help_command(message: Message):
 
 @dp.message(Command(commands='cancel'))
 async def process_cancel_command(message: Message):
-    game.reset()
+    users[message.from_user.id].reset()
     await message.answer(text['cancel'])
     await message.answer(text['start'])
 
 
 @dp.message(Command(commands='stat'))
 async def process_stat_command(message: Message):
-    await message.answer(text['stat'](game.total_games, game.winning_games))
+    user_id = message.from_user.id
+    await message.answer(text['stat'](users[user_id].total_games, users[user_id].winning_games))
 
 
 @dp.message(F.text.lower().in_(['да', 'давай', 'сыграем']))
 async def process_game_command_yes(message: Message):
-    game.generate_random_number()
-    game.in_game = True
-    await message.answer(text['yes'](game.attempts))
+    user_id = message.from_user.id
+    users[user_id].generate_random_number()
+    users[user_id].in_game = True
+    await message.answer(text['yes'](users[user_id].attempts))
 
 
 @dp.message(F.text.lower().in_(['нет', 'не хочу', 'в другой раз']))
@@ -89,8 +94,9 @@ async def process_game_command_no(message: Message):
 
 @dp.message(lambda x: x.text and x.text.isdigit())
 async def process_numbers_answer(message: Message):
-    if game.in_game:
-        reply_message = game.check_number(message.text)
+    user_id = message.from_user.id
+    if users[user_id].in_game:
+        reply_message = users[user_id].check_number(message.text)
         await message.answer(reply_message)
     else:
         await message.answer(text['start'])
@@ -98,7 +104,7 @@ async def process_numbers_answer(message: Message):
 
 @dp.message()
 async def process_other_answers(message: Message):
-    if game.in_game:
+    if users[message.from_user.id].in_game:
         await message.answer(text['not_is_digit'])
     else:
         await message.answer(text['start'])
